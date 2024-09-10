@@ -31,33 +31,40 @@ public class LikeService {
     @Autowired
     RestTemplate restTemplate;
 
-//    @Autowired
-//    UserRepository userRepository;
-
     private static final Logger logger = LoggerFactory.getLogger(LikeService.class);
 
-    public ResponseEntity addLike(LikeRequestDto likeRequestDto, HttpServletRequest request) {
-
-//        User user = userRepository.findById(likeRequestDto.getUserId()).orElse(null);
-        // TODO User user=
+    public ResponseEntity<String> addLike(LikeRequestDto likeRequestDto, HttpServletRequest request) {
 
         String headerAuth = request.getHeader("Authorization");
         HttpHeaders headers = new HttpHeaders();
         headers.set("Authorization", headerAuth);
-//        headers.setContentType(MediaType.APPLICATION_JSON);
         HttpEntity<String> entity = new HttpEntity<>(headers);
 
         String userUrl = UriComponentsBuilder.fromHttpUrl(userServiceBaseUrl)
-                .pathSegment("get-userById", String.valueOf(likeRequestDto.getUserId()))
+                .pathSegment("user")
+                .queryParam("postId", String.valueOf(likeRequestDto.getUserId()))
                 .toUriString();
 
-        ResponseEntity<UserDto> userResponse = restTemplate.exchange(userUrl, HttpMethod.GET, entity, UserDto.class);
-        UserDto user = userResponse.getBody();
+        UserDto user;
+        try {
+            ResponseEntity<UserDto> userResponse = restTemplate.exchange(userUrl, HttpMethod.GET, entity, UserDto.class);
+            logger.info("User Response received: {}", userResponse);
+            user = userResponse.getBody();
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+            return new ResponseEntity<>(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+        if (user == null) {
+            logger.error("User not found");
+            return new ResponseEntity<>("User not found", HttpStatus.NOT_FOUND);
+        }
 
         Post post = postRepository.findById(likeRequestDto.getPostId()).orElse(null);
-
-        if(post != null && Objects.requireNonNull(user).getRole().equals("USER")) {
-
+        if (post == null) {
+            logger.error("Post not found");
+            return new ResponseEntity<>("Post not found", HttpStatus.NOT_FOUND);
+        }
+        else if("USER".equals(user.getRole()))  {
             PostDto postDto = PostDto.builder()
                     .postId(post.getPostId())
                     .caption(post.getCaption())
@@ -66,35 +73,26 @@ public class LikeService {
                     .hotelId(post.getHotelId())
                     .postUsers(post.getPostUsers())
                     .build();
-            Set<PostDto> postDtoSet = new HashSet<>(List.of(postDto));
             user.getUserPosts().add(postDto);
 
-//            user.getUserPosts().add(postDto);
-            logger.info(user.toString());
-//            UserDto userDto = new UserDto(user.getUserId(), user.getName(),
-//                    user.getEmail(), user.getPassword(), user.getAddress(),
-//                    user.getState(), user.getCountry(), user.getRole(),
-//                    user.getImage(), postDtoSet);
-
-//            postDto.setPostUsers( new HashSet<>(List.of(userDto)));
-//            postDtoSet.add()
-
-//            userRepository.save(user);
             String likedUserUrl = UriComponentsBuilder.fromHttpUrl(userServiceBaseUrl)
-                    .pathSegment("liked-user")
+                    .pathSegment("user")
                     .toUriString();
-
             HttpEntity<UserDto> newEntity = new HttpEntity<>(user, headers);
-
-            ResponseEntity<User> response = restTemplate.exchange(likedUserUrl, HttpMethod.POST, newEntity, User.class);
-            return new ResponseEntity<>(response, HttpStatus.CREATED);
-        }else {
-            assert user != null;
-            if (user.getRole().equals("BUSINESS")) {
-                return new ResponseEntity<String>("Invalid User Role", HttpStatus.BAD_REQUEST);
+            try {
+                ResponseEntity<User> response = restTemplate.exchange(likedUserUrl, HttpMethod.POST, newEntity, User.class);
+                logger.info(Objects.requireNonNull(response.getBody()).toString());
+                return new ResponseEntity<>("Success", HttpStatus.CREATED);
+            } catch (Exception e) {
+                logger.error(e.getMessage());
+                return new ResponseEntity<>(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
             }
+
+        } else if ("BUSINESS".equals(user.getRole())) {
+            logger.error("Error: Invalid User Role");
+            return new ResponseEntity<>("Error: Invalid User Role", HttpStatus.BAD_REQUEST);
         }
-        return new ResponseEntity<String>("Something went Wrong", HttpStatus.BAD_REQUEST);
+        return new ResponseEntity<>("Error: Something went Wrong", HttpStatus.BAD_REQUEST);
     }
 
 

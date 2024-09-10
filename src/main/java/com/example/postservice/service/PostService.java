@@ -11,10 +11,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.*;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -24,10 +26,12 @@ import java.io.IOException;
 import java.math.BigInteger;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
-public class PostService {
+public class
+PostService {
 
     @Autowired
     PostRepository postRepository;
@@ -43,60 +47,73 @@ public class PostService {
 
 
     public ResponseEntity<List<PostInforDto>> getAllPost(int userId) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        UserInforDto user = (UserInforDto) authentication.getPrincipal();
-        String role = user.getRole();
-//        String role = userRepository.getRoleById(userId);
-        logger.info("user "+user);
-        List<Post> post=null;
-        if(Objects.equals(role, "BUSINESS")) {
-            post = postRepository.findAllByHotelId(userId);
-        }else if(Objects.equals(role, "USER")) {
-            post = postRepository.findAll();
-        }else {
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication == null || !authentication.isAuthenticated()) {
+                logger.error("User is not authenticated");
+                return new ResponseEntity<>(HttpStatus.UNAUTHORIZED);
+            }
+            UserInforDto user = (UserInforDto) authentication.getPrincipal();
+            if (user == null) {
+                logger.error("User details are not found in the security context");
+                return new ResponseEntity<>(HttpStatus.UNAUTHORIZED);
+            }
+
+            String role = user.getRole();
+            List<Post> post=null;
+            if(Objects.equals(role, "BUSINESS")) {
+                post = postRepository.findAllByHotelId(userId);
+            }else if(Objects.equals(role, "USER")) {
+                post = postRepository.findAll();
+            }else {
+                logger.error("Invalid user role: {}", role);
+                return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            }
+            if (post == null || post.isEmpty()) {
+                logger.info("No posts found for user with ID: {}", userId);
+                return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+            }
+
+            int logInUserId = user.getUserId();
+            List<PostInforDto> postInforDtos = post.stream().map(element -> {
+                PostDetailsDto postDetailsDto = PostDetailsDto.builder()
+                        .postId(element.getPostId())
+                        .caption(element.getCaption())
+                        .time(element.getTime())
+                        .postImage(element.getImage())
+                        .build();
+
+                HotelDetailsDto hotelDetailsDto = HotelDetailsDto.builder()
+                        .hotelId(element.getHotelId().getUserId())
+                        .name(element.getHotelId().getName())
+                        .hotelImage(element.getHotelId().getImage())
+                        .build();
+
+                int likeCount = postRepository.countLikeByPostId(element.getPostId());
+                BigInteger isLike = postRepository.checkLikeByUserIdAndPostId(logInUserId, element.getPostId());
+
+                LikeDetailsDto likeDetailsDto = LikeDetailsDto.builder()
+                        .likeCount(likeCount)
+                        .liked((isLike.compareTo(BigInteger.valueOf(0)) > 0))
+                        .build();
+
+                PostInforDto postInforDto = PostInforDto.builder()
+                        .postDetailsDto(postDetailsDto)
+                        .hotelDetailsDto(hotelDetailsDto)
+                        .likeDetailsDto(likeDetailsDto)
+                        .build();
+                return postInforDto;
+            }).collect(Collectors.toList());
+
+            return new ResponseEntity<>(postInforDtos, HttpStatus.OK);
+        } catch (Exception e) {
+            logger.error("An unexpected error occurred: {}", e.getMessage(), e);
+            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
         }
-//        List<Post> post = postRepository.findAll();
-
-        int logInUserId = user.getUserId();
-        List<PostInforDto> postInforDtos = post.stream().map(element -> {
-            PostDetailsDto postDetailsDto = PostDetailsDto.builder()
-                    .postId(element.getPostId())
-                    .caption(element.getCaption())
-                    .time(element.getTime())
-                    .postImage(element.getImage())
-                    .build();
-
-            HotelDetailsDto hotelDetailsDto = HotelDetailsDto.builder()
-                    .hotelId(element.getHotelId().getUserId())
-                    .name(element.getHotelId().getName())
-                    .hotelImage(element.getHotelId().getImage())
-                    .build();
-
-
-            int likeCount = postRepository.countLikeByPostId(element.getPostId());
-            BigInteger isLike = postRepository.checkLikeByUserIdAndPostId(logInUserId, element.getPostId());
-
-
-            LikeDetailsDto likeDetailsDto = LikeDetailsDto.builder()
-                    .likeCount(likeCount)
-                    .liked((isLike.compareTo(BigInteger.valueOf(0)) > 0))
-                    .build();
-
-            PostInforDto postInforDto = PostInforDto.builder()
-                    .postDetailsDto(postDetailsDto)
-                    .hotelDetailsDto(hotelDetailsDto)
-                    .likeDetailsDto(likeDetailsDto)
-                    .build();
-            return postInforDto;
-        }).collect(Collectors.toList());
-
-
-        return new ResponseEntity<>(postInforDtos, HttpStatus.OK);
     }
 
 
-    public ResponseEntity savePost(MultipartFile image, CreatePostDto createPostDto, HttpServletRequest request) throws IOException {
+    public ResponseEntity<Void> savePost(MultipartFile image, CreatePostDto createPostDto, HttpServletRequest request) throws IOException {
 
         String headerAuth = request.getHeader("Authorization");
         HttpHeaders headers = new HttpHeaders();
@@ -104,36 +121,59 @@ public class PostService {
         HttpEntity<String> entity = new HttpEntity<>(headers);
 
         String userUrl = UriComponentsBuilder.fromHttpUrl(userServiceBaseUrl)
-                .pathSegment("get-userById", String.valueOf(createPostDto.getHotelId()))
+                .pathSegment("user")
+                .queryParam("postId", String.valueOf(createPostDto.getHotelId()))
                 .toUriString();
 
-        ResponseEntity<User> userResponse = restTemplate.exchange(userUrl, HttpMethod.GET, entity, User.class);
-        User user = userResponse.getBody();
+        try {
+            ResponseEntity<User> userResponse = restTemplate.exchange(userUrl, HttpMethod.GET, entity, User.class);
+            User user = userResponse.getBody();
 
-        Post post = Post.builder()
-                        .caption(createPostDto.getCaption())
-                        .image(image.getBytes())
-                        .hotelId(user)
-                        .build();
-        postRepository.save(post);
-        return new ResponseEntity<>(HttpStatus.CREATED);
-
+            Post post = Post.builder()
+                    .caption(createPostDto.getCaption())
+                    .image(image.getBytes())
+                    .hotelId(user)
+                    .build();
+            postRepository.save(post);
+            logger.info("Post saved successfully");
+            return new ResponseEntity<>(HttpStatus.CREATED);
+        } catch (HttpClientErrorException e) {
+            logger.error("Hotel ID not found: {}", e.getMessage());
+            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+        }
+        catch (Exception e) {
+            logger.error("Exception: {}", e.getMessage(), e);
+            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+        }
     }
 
-    public ResponseEntity deletePost(int postId){
-        Post post = postRepository.findById(postId).orElse(null);
-        if(post != null) {
-//            postRepository.deleteUserPostsByPostId(postId);
-            postRepository.deleteById(postId);
-            return new ResponseEntity<>(HttpStatus.NO_CONTENT);
-        }else {
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+    public ResponseEntity<Void> deletePost(int postId){
+        try {
+            Optional<Post> post = postRepository.findById(postId);
+            if (post.isPresent()) {
+                postRepository.deleteById(postId);
+                logger.info("Post with ID {} deleted successfully", postId);
+                return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+            }else {
+                logger.warn("Post with ID {} not found", postId);
+                return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            }
+        } catch (DataAccessException e) {
+            logger.error("Error occurred while deleting post with ID {}: {}", postId, e.getMessage(), e);
+            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
     public ResponseEntity<Post> getPostByPostId(int postId) {
-        Post post = postRepository.findById(postId).orElse(null);
-        return new ResponseEntity<>(post, HttpStatus.OK);
+        Post post;
+        try {
+            post = postRepository.findById(postId)
+                    .orElseThrow(() -> new RuntimeException("Post not found"));
+            return new ResponseEntity<>(post, HttpStatus.OK);
+        } catch (RuntimeException e) {
+            logger.error("RuntimeException- {}", e.getMessage());
+            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+        }
     }
 
 }
