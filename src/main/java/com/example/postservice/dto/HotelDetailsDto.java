@@ -7,12 +7,13 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.io.Serializable;
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 @ApiModel(value="PostDetailsDto")
-public class HotelDetailsDto {
+public class HotelDetailsDto implements Serializable {
 
     @ApiModelProperty(value = "Post's id", dataType = "int")
     private int hotelId;

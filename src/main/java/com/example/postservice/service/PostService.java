@@ -11,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.*;
 import org.springframework.security.core.Authentication;
@@ -45,18 +46,18 @@ PostService {
 
     private static final Logger logger = LoggerFactory.getLogger(PostService.class);
 
-
-    public ResponseEntity<List<PostInforDto>> getAllPost(int userId) {
+    @Cacheable(value = "posts", key = "#userId")
+    public List<PostInforDto> getAllPost(int userId) {
         try {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
             if (authentication == null || !authentication.isAuthenticated()) {
                 logger.error("User is not authenticated");
-                return new ResponseEntity<>(HttpStatus.UNAUTHORIZED);
+                throw new IllegalStateException("User is not authenticated");
             }
             UserInforDto user = (UserInforDto) authentication.getPrincipal();
             if (user == null) {
                 logger.error("User details are not found in the security context");
-                return new ResponseEntity<>(HttpStatus.UNAUTHORIZED);
+                throw new IllegalStateException("User details are missing");
             }
 
             String role = user.getRole();
@@ -67,11 +68,11 @@ PostService {
                 post = postRepository.findAll();
             }else {
                 logger.error("Invalid user role: {}", role);
-                return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+                throw new IllegalArgumentException("Invalid user role");
             }
             if (post == null || post.isEmpty()) {
                 logger.info("No posts found for user with ID: {}", userId);
-                return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+                throw new IllegalArgumentException("No posts found");
             }
 
             int logInUserId = user.getUserId();
@@ -105,10 +106,10 @@ PostService {
                 return postInforDto;
             }).collect(Collectors.toList());
 
-            return new ResponseEntity<>(postInforDtos, HttpStatus.OK);
+            return postInforDtos;
         } catch (Exception e) {
             logger.error("An unexpected error occurred: {}", e.getMessage(), e);
-            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+            throw new RuntimeException("Internal server error", e);
         }
     }
 
