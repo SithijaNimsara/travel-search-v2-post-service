@@ -48,6 +48,7 @@ PostService {
 
     @Cacheable(value = "posts", key = "#userId")
     public List<PostInforDto> getAllPost(int userId) {
+        logger.info("userId: {}", userId);
         try {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
             if (authentication == null || !authentication.isAuthenticated()) {
@@ -97,7 +98,7 @@ PostService {
                         .likeCount(likeCount)
                         .liked((isLike.compareTo(BigInteger.valueOf(0)) > 0))
                         .build();
-
+                logger.info("likeDetailsDto: {}", likeDetailsDto);
                 PostInforDto postInforDto = PostInforDto.builder()
                         .postDetailsDto(postDetailsDto)
                         .hotelDetailsDto(hotelDetailsDto)

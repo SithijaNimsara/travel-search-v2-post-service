@@ -32,10 +32,10 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 //@RefreshScope
 public class WebSecurityConfig {
 
-    @Value("${login-user.api.endpoint}")
+    @Value("${login-user.api.endpoint:/user/login-user}")
     String login_user__;
 
-    @Value("${create-user.api.endpoint}")
+    @Value("${create-user.api.endpoint:/user/create-user}")
     String create_user__;
 
     private static final Logger logger = LoggerFactory.getLogger(WebSecurityConfig.class);

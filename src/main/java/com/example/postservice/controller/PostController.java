@@ -8,6 +8,8 @@ import com.example.postservice.error.HttpExceptionResponse;
 import com.example.postservice.service.PostService;
 import com.sun.xml.bind.v2.TODO;
 import io.swagger.annotations.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.HttpStatus;
@@ -32,6 +34,8 @@ public class PostController {
     @Autowired
     PostService postService;
 
+    private static final Logger logger = LoggerFactory.getLogger(PostController.class);
+
 
     @GetMapping(params = "userId")
     @PreAuthorize("hasRole('USER') or hasRole('BUSINESS')")
@@ -51,6 +55,7 @@ public class PostController {
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);
 
         } catch (Exception e) {
+            logger.error("Exception", e);
             return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
