@@ -41,7 +41,7 @@ PostService {
     RestTemplate restTemplate;
 
 
-    @Value("${external.user-service.base-url}")
+    @Value("${external.user-service.base-url:http://user-service:8082}")
     private String userServiceBaseUrl;
 
     private static final Logger logger = LoggerFactory.getLogger(PostService.class);
@@ -121,7 +121,7 @@ PostService {
         HttpHeaders headers = new HttpHeaders();
         headers.set("Authorization", headerAuth);
         HttpEntity<String> entity = new HttpEntity<>(headers);
-
+        logger.info("UserServiceBaseUrl {}", userServiceBaseUrl);
         String userUrl = UriComponentsBuilder.fromHttpUrl(userServiceBaseUrl)
                 .pathSegment("user")
                 .queryParam("postId", String.valueOf(createPostDto.getHotelId()))

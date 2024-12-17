@@ -76,8 +76,8 @@ public class WebSecurityConfig {
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-        logger.info(login_user__);
-        logger.info(create_user__);
+        logger.info("Login User: "+login_user__);
+        logger.info("Create User: "+create_user__);
         http.cors().and().csrf().disable()
                 .exceptionHandling().authenticationEntryPoint(unauthorizedHandler).and()
                 .exceptionHandling().accessDeniedHandler(customAccessDeniedHandler).and()

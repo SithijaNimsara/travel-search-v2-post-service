@@ -35,7 +35,7 @@ public class GalleryService {
     @Autowired
     GalleryRepository galleryRepository;
 
-    @Value("${external.user-service.base-url}")
+    @Value("${external.user-service.base-url:http://user-service:8082}")
     private String userServiceBaseUrl;
 
     GalleryInforDto galleryInforDto;
@@ -50,7 +50,7 @@ public class GalleryService {
             HttpHeaders headers = new HttpHeaders();
             headers.set("Authorization", headerAuth);
             HttpEntity<String> entity = new HttpEntity<>(headers);
-
+            logger.info("UserServiceBaseUrl {}", userServiceBaseUrl);
             String userUrl = UriComponentsBuilder.fromHttpUrl(userServiceBaseUrl)
                     .pathSegment("user")
                     .queryParam("postId", String.valueOf(hotelId))
@@ -97,6 +97,7 @@ public class GalleryService {
         headers.set("Authorization", headerAuth);
         HttpEntity<String> entity = new HttpEntity<>(headers);
 
+        logger.info("UserServiceBaseUrl {}", userServiceBaseUrl);
         String userUrl = UriComponentsBuilder.fromHttpUrl(userServiceBaseUrl)
                 .pathSegment("user")
                 .queryParam("postId", String.valueOf(hotelId))

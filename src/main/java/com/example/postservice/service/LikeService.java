@@ -25,7 +25,7 @@ public class LikeService {
     @Autowired
     PostRepository postRepository;
 
-    @Value("${external.user-service.base-url}")
+    @Value("${external.user-service.base-url:http://user-service:8082}")
     private String userServiceBaseUrl;
 
     @Autowired
@@ -40,6 +40,7 @@ public class LikeService {
         headers.set("Authorization", headerAuth);
         HttpEntity<String> entity = new HttpEntity<>(headers);
 
+        logger.info("UserServiceBaseUrl {}", userServiceBaseUrl);
         String userUrl = UriComponentsBuilder.fromHttpUrl(userServiceBaseUrl)
                 .pathSegment("user")
                 .queryParam("postId", String.valueOf(likeRequestDto.getUserId()))
@@ -75,6 +76,7 @@ public class LikeService {
                     .build();
             user.getUserPosts().add(postDto);
 
+            logger.info("UserServiceBaseUrl {}", userServiceBaseUrl);
             String likedUserUrl = UriComponentsBuilder.fromHttpUrl(userServiceBaseUrl)
                     .pathSegment("user")
                     .toUriString();
